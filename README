@@ -1,4 +1,2 @@
-typesimulator
---
-
-Python script that simulates human-like typing
+humanizer
+Python script that simulates human-like typing. Uses machine learning and other algorithms to provide authentic, humanlike typing.
