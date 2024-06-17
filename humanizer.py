@@ -4,12 +4,13 @@ import logging
 import sys
 import json
 import os
-import pyautogui
 import datetime
+import pyautogui
 import pyperclip
 import numpy as np
 from tqdm import tqdm
 from sklearn.neural_network import MLPRegressor
+from pynput import keyboard  # To capture keystrokes
 
 # Setup logging to the command prompt window
 logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -19,9 +20,10 @@ typo_count = 0
 start_time = None
 end_time = None
 typing_style = "average"
-error_history = []
 typed_output = []  # To keep track of typed characters
 profiles_path = "typing_profiles.json"
+error_history = []  # Initialize error history
+keystroke_data = []  # To capture keystrokes and timing
 
 # Define typing profiles
 typing_profiles = {
@@ -38,11 +40,85 @@ initial_data_X = np.array([[0, 1, 1], [1, 1, 2], [2, 1, 3]])  # Extended feature
 initial_data_y = np.array([0.2, 0.15, 0.1])
 model.fit(initial_data_X, initial_data_y)
 
+def record_keystrokes():
+    """
+    Record user keystrokes and timing information.
+    """
+    global keystroke_data
+    keystroke_data = []  # Reset keystroke data
+
+    def on_press(key):
+        try:
+            current_time = time.time()
+            if hasattr(key, 'char') and key.char is not None:
+                keystroke_data.append((key.char, current_time))
+                logging.debug(f"Key pressed: {key.char} at {current_time}")
+            else:
+                key_name = key.name if hasattr(key, 'name') else str(key)
+                keystroke_data.append((key_name, current_time))
+                logging.debug(f"Special key pressed: {key_name} at {current_time}")
+        except Exception as e:
+            logging.error(f"Error capturing key press: {e}")
+
+    def on_release(key):
+        if key == keyboard.Key.esc:
+            # Stop listener
+            return False
+
+    print("Recording keystrokes. Press 'ESC' to stop recording.")
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
+
+def save_keystroke_data():
+    """
+    Save keystroke data to a file for training purposes.
+    """
+    try:
+        with open('keystroke_data.json', 'w') as f:
+            json.dump(keystroke_data, f)
+        logging.info("Keystroke data saved for training.")
+    except Exception as e:
+        logging.error(f"Error saving keystroke data: {e}")
+
+def train_model_from_keystrokes():
+    """
+    Train the typing model using the recorded keystroke data.
+    """
+    global keystroke_data
+    if not keystroke_data:
+        logging.warning("No keystroke data available for training.")
+        return
+
+    # Extract features and target values
+    X = []
+    y = []
+    for i in range(1, len(keystroke_data)):
+        prev_key, prev_time = keystroke_data[i - 1]
+        curr_key, curr_time = keystroke_data[i]
+        delay = curr_time - prev_time
+
+        # Only use ord() for single-character keys
+        prev_key_code = ord(prev_key) if len(prev_key) == 1 else 0
+        curr_key_code = ord(curr_key) if len(curr_key) == 1 else 0
+
+        key_features = [prev_key_code, curr_key_code, i]
+        X.append(key_features)
+        y.append(delay)
+
+    X = np.array(X)
+    y = np.array(y)
+    try:
+        model.fit(X, y)
+        logging.info("Model trained with keystroke data.")
+    except Exception as e:
+        logging.error(f"Error training model: {e}")
+
 def simulate_typing(text):
-    global typo_count, start_time, end_time, error_history, typed_output
+    global typo_count, start_time, end_time, typed_output, error_history
     logging.info(f"Started typing simulation for text: {text}")
     typed_output = []  # Reset typed_output for each run
     typo_count = 0
+    error_history = []  # Reset error history
 
     start_time = time.time()
     words = text.split()
@@ -51,31 +127,15 @@ def simulate_typing(text):
             try:
                 delay = get_typing_delay(word_index, len(word), char_index)
                 time.sleep(delay)
-                if char == '\n':
-                    pyautogui.press('enter')
-                    typed_output.append('\n')
-                else:
-                    pyautogui.typewrite(char)
-                    typed_output.append(char)
+                pyautogui.typewrite(char)
+                typed_output.append(char)
                 logging.debug(f"Typed character: '{char}' with delay: {delay:.2f}s")
 
-                # Simulate typo and correction
                 if random.random() < typing_profiles[typing_style]["typo_probability"]:
-                    typo_char = generate_typo(char)
-                    logging.debug(f"Generated typo character: '{typo_char}' instead of '{char}'")
-                    handle_typo(typo_char, char)
+                    typo_action = random.choice(['substitute', 'omit', 'repeat'])
+                    logging.debug(f"Simulating typo action: {typo_action}")
+                    handle_typo(char, typo_action)
 
-                # Simulate random deletions and retyping
-                if random.random() < 0.02 and len(typed_output) > 10:
-                    num_chars_to_delete = random.randint(1, 5)
-                    for _ in range(num_chars_to_delete):
-                        if typed_output:
-                            pyautogui.press('backspace')
-                            typed_output.pop()
-                    logging.debug(f"Revised last {num_chars_to_delete} characters")
-                    retype_chars(num_chars_to_delete)
-
-                # Simulate thinking pauses
                 if random.random() < 0.05:
                     pause_duration = random.uniform(0.5, 2.0)
                     logging.debug(f"Pausing for {pause_duration:.2f}s to simulate thinking")
@@ -90,33 +150,41 @@ def simulate_typing(text):
     end_time = time.time()
     logging.info("Finished typing simulation")
 
-def handle_typo(typo_char, original_char):
+def handle_typo(char, action):
     """
-    Handles typing a typo and then correcting it.
+    Handles simulating a typo and correcting it.
     """
-    global typo_count, typed_output
-    # Type the typo
-    pyautogui.press('backspace')
-    pyautogui.typewrite(typo_char)
-    typo_count += 1
-    typed_output[-1] = typo_char
-    error_history.append((len(typed_output) - 1, original_char, typo_char))
+    global typo_count, typed_output, error_history
 
-    # Correct the typo
-    pyautogui.press('backspace')
-    pyautogui.typewrite(original_char)
-    typed_output[-1] = original_char
-    logging.debug(f"Corrected typo to: '{original_char}'")
+    if action == 'substitute':
+        typo_char = generate_typo(char)
+        pyautogui.press('backspace')
+        pyautogui.typewrite(typo_char)
+        typo_count += 1
+        typed_output[-1] = typo_char
+        error_history.append((len(typed_output) - 1, char, typo_char))
+        logging.debug(f"Substituted '{char}' with '{typo_char}'")
 
-def retype_chars(num_chars):
-    """
-    Retypes the given number of characters from the end of the current output.
-    """
-    global typed_output
-    retyped_text = typed_output[-num_chars:]
-    for char in retyped_text:
+    elif action == 'omit':
+        pyautogui.press('backspace')
+        typed_output.pop()
+        typo_count += 1
+        error_history.append((len(typed_output), char, ''))
+        logging.debug(f"Omitted character '{char}'")
+
+    elif action == 'repeat':
         pyautogui.typewrite(char)
-        logging.debug(f"Retyped character: '{char}'")
+        typed_output.append(char)
+        typo_count += 1
+        error_history.append((len(typed_output) - 1, char, char * 2))
+        logging.debug(f"Repeated character '{char}'")
+
+    # Correct the typo after a short delay
+    time.sleep(random.uniform(0.2, 0.5))
+    pyautogui.press('backspace')
+    pyautogui.typewrite(char)
+    typed_output[-1] = char
+    logging.debug(f"Corrected typo to '{char}'")
 
 def generate_typo(char):
     """
@@ -136,14 +204,11 @@ def generate_typo(char):
         'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u', 'ñ': 'n', 'ç': 'c',
         'ß': 's', 'ø': 'o', 'å': 'a', 'œ': 'o', 'æ': 'a', 'ð': 'd'
     }
-    if char in typo_variants:
-        return typo_variants[char] if random.random() < 0.5 else random.choice(list(typo_variants.values()))
-    else:
-        return char
+    return typo_variants.get(char, char)
 
 def get_typing_delay(word_index, word_length, char_index):
     delays = typing_profiles[typing_style]["delay_range"]
-    historical_data = np.array(error_history)
+    historical_data = np.array(error_history, dtype=object)
     if len(historical_data) > 0:
         input_features = np.array([[word_index, word_length, char_index]])
         try:
@@ -201,18 +266,24 @@ def save_typing_profile():
         'typing_profiles': typing_profiles,
         'error_history': error_history
     }
-    with open(profiles_path, 'w') as f:
-        json.dump(data, f)
-    logging.info("Typing profiles and error history saved.")
+    try:
+        with open(profiles_path, 'w') as f:
+            json.dump(data, f)
+        logging.info("Typing profiles and error history saved.")
+    except Exception as e:
+        logging.error(f"Error saving typing profile: {e}")
 
 def load_typing_profile():
     global typing_profiles, error_history
     if os.path.exists(profiles_path):
-        with open(profiles_path, 'r') as f:
-            data = json.load(f)
-            typing_profiles = data.get('typing_profiles', typing_profiles)
-            error_history = data.get('error_history', error_history)
-        logging.info("Typing profiles and error history loaded.")
+        try:
+            with open(profiles_path, 'r') as f:
+                data = json.load(f)
+                typing_profiles = data.get('typing_profiles', typing_profiles)
+                error_history = data.get('error_history', error_history)
+            logging.info("Typing profiles and error history loaded.")
+        except Exception as e:
+            logging.error(f"Error loading typing profile: {e}")
     else:
         logging.info("No existing typing profiles found.")
 
@@ -227,7 +298,7 @@ def display_cli_statistics():
     total_chars = sum(len(err[1]) for err in error_history)
     total_errors = len(error_history)
     error_rate = total_errors / total_chars * 100 if total_chars > 0 else 0
-    avg_typo_delay = np.mean([err[2] for err in error_history]) if error_history else 0
+    avg_typo_delay = np.mean([float(err[2]) for err in error_history if isinstance(err[2], float) or isinstance(err[2], int)]) if error_history else 0
 
     print(f"\nTyping Statistics:")
     print(f"-------------------")
@@ -237,33 +308,54 @@ def display_cli_statistics():
     print(f"Average typo delay: {avg_typo_delay:.2f}s\n")
     logging.info(f"Typing Statistics - Total chars: {total_chars}, Total errors: {total_errors}, Error rate: {error_rate:.2f}%, Avg typo delay: {avg_typo_delay:.2f}s")
 
+def manual_training_mode():
+    """
+    Manual training mode where the user types and their statistics are collected.
+    """
+    global keystroke_data, error_history
+
+    print("Manual Training Mode")
+    print("====================")
+    print("Start typing your text. Press 'ESC' to stop recording.\n")
+
+    record_keystrokes()  # Capture user keystrokes
+    save_keystroke_data()  # Save keystroke data for training
+    train_model_from_keystrokes()  # Train model using the captured keystrokes
+
+    print("Typing statistics saved and model trained with the captured data.\n")
+
 def main():
     try:
         load_typing_profile()
 
-        print("Choose typing style (slow, average, fast):")
-        style = input().strip()
-        set_typing_style(style)
+        print("Choose mode (1: Typing Simulation, 2: Manual Training):")
+        mode = input().strip()
 
-        user_text = get_user_text()
+        if mode == '1':
+            print("Choose typing style (slow, average, fast):")
+            style = input().strip()
+            set_typing_style(style)
 
-        # Calculate and display the estimated end time before countdown
-        average_delay = sum(typing_profiles[typing_style]["delay_range"]) / 2
-        estimated_end_time = datetime.datetime.now() + datetime.timedelta(seconds=len(user_text) * average_delay)
-        print(f"Estimated end time: {estimated_end_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        logging.info(f"Estimated end time: {estimated_end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            user_text = get_user_text()
 
-        display_progress_bar(5)
-        simulate_typing(user_text)
-        print_summary(start_time, end_time, user_text, typo_count)
+            average_delay = sum(typing_profiles[typing_style]["delay_range"]) / 2
+            estimated_end_time = datetime.datetime.now() + datetime.timedelta(seconds=len(user_text) * average_delay)
+            print(f"Estimated end time: {estimated_end_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            logging.info(f"Estimated end time: {estimated_end_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-        if error_history:
-            X = np.array([[i, len(err[1]), len(typed_output) - i] for i, err in enumerate(error_history)])
-            y = np.array([random.uniform(*typing_profiles[typing_style]["delay_range"]) for _ in error_history])
-            model.fit(X, y)
+            display_progress_bar(5)
+            simulate_typing(user_text)
+            print_summary(start_time, end_time, user_text, typo_count)
 
-        # Display CLI statistics instead of a graph
-        display_cli_statistics()
+            if error_history:
+                X = np.array([[i, len(err[1]), len(typed_output) - i] for i, err in enumerate(error_history)], dtype=float)
+                y = np.array([random.uniform(*typing_profiles[typing_style]["delay_range"]) for _ in error_history], dtype=float)
+                model.fit(X, y)
+
+            display_cli_statistics()
+
+        elif mode == '2':
+            manual_training_mode()
 
         save_typing_profile()
 
