@@ -17,16 +17,6 @@ Setup Instructions
 3. Configuration
    - Ensure all required dependencies are installed.
    - Set up the Python environment with necessary packages.
-
-4. Typing Profiles
-   - Edit typing_profiles.json to customize typing styles (slow, average, fast):
-
-
-     {
-       "slow": {"delay_range": [0.15, 0.4], "typo_probability": 0.15},
-       "average": {"delay_range": [0.05, 0.2], "typo_probability": 0.05},
-       "fast": {"delay_range": [0.01, 0.1], "typo_probability": 0.02}
-     }
      
 
  Usage
