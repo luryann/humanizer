@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %
 settings = {
     "base_wpm": 5555, # Base words per minute, value 5000 is around 68 WPN
     "typo_probability": 0.35, # How often a typo is going to occur, default is 35%
-    "speed_variation": 0.45  # aka 45% variation in speed
+    "speed_variation": 0.25  # aka 25% variation in speed
 }
 typo_count = 0
 typed_output = []
