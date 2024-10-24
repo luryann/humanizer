@@ -242,9 +242,9 @@ def main():
     simulator = TypingSimulator()
     
     while True:
-        print("\nHumanized Typing Simulator")
+        print("\nhumanizer")
         print("------------------------")
-        print("1. Start Typing Simulation")
+        print("1. Start Humanizer")
         print("2. Settings")
         print("3. Exit")
         print(f"\nHotkeys: {settings['pause_key'].upper()} to pause/resume, {settings['stop_key'].upper()} to stop")
