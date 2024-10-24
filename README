@@ -1,25 +1,9 @@
 humanizer
 Python script that simulates human-like typing. 
 
-Usage Instructions
-
-1. Dependencies
+Dependencies
    - Python 3.x
    - Required Python packages (pip install):
      - pyautogui
+     - keyboard
 
-2. Installation
-   - Clone the repository or download the script directly.
-
-3. Configuration
-settings = {
-    "base_wpm": 90, # Base words per minute
-    "typo_probability": 0.15, # How often a typo is going to occur, default is 15%
-    "speed_variation": 0.2  # aka 20% variation in speed
-
- Usage
-- Run the script by executing python humanizer.py.
-- Edit the settings if you wish to, otherwise the defaults are fine.
-- Input the text to be typed when prompted (END on a new line to finish).
-- The script will simulate typing the input text with variations in typing speed and potential typos.
-- Upon completion, it will display typing statistics including time taken, words per minute (WPM), number of typos, and error rate.
