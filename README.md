@@ -1,4 +1,5 @@
-humanizer
+**humanizer**
+
 Python script that simulates human-like typing. 
 
 Dependencies
