@@ -4,7 +4,7 @@ Python script that simulates human-like typing.
 
 Dependencies
    - Python 3.x
-   - Required Python packages (pip install):
+   - Required Python packages (`pip install`):
      - pyautogui
      - keyboard
    
