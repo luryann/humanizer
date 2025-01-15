@@ -1,3 +1,5 @@
+// todo: fix return keypress logic for list support
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -252,15 +254,15 @@ void display_typing_recap(TypingSimulator* sim) {
     time_t end_time = time(NULL);
     double elapsed_time = difftime(end_time, sim->settings.start_time);
     
-    printf("\statistics\n");
-    printf("\please note the WPM calculation is not perfect and will vary slightly.\n");
+    printf("\nstatistics\n");
+    printf("please note the WPM calculation is not perfect and will vary slightly.\n");
     printf("===================\n");
-    printf("Total time: %.1f seconds\n", elapsed_time);
-    printf("Characters typed: %d\n", sim->settings.chars_typed);
-    printf("Words typed: %d\n", sim->settings.words_typed);
-    printf("Average WPM: %.1f\n", (sim->settings.words_typed / (elapsed_time / 60.0)));
-    printf("Typos made: %d\n", sim->typo_count);
-    printf("\nPress any key to continue...");
+    printf("total time: %.1f seconds\n", elapsed_time);
+    printf("characters typed: %d\n", sim->settings.chars_typed);
+    printf("words typed: %d\n", sim->settings.words_typed);
+    printf("average WPM: %.1f\n", (sim->settings.words_typed / (elapsed_time / 60.0)));
+    printf("typos made: %d\n", sim->typo_count);
+    printf("\npress any key to continue...");
     _getch();
     clear_screen();
 }
