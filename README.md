@@ -1,8 +1,8 @@
 **humanizer**
 
-Python script that simulates human-like typing. 
+Python script that simulates human-like typing. A version complied in C is also available for Windows.
 
-Dependencies
+Dependencies for Python Version
    - Python 3.x
    - Required Python packages (`pip install`):
      - pyautogui
