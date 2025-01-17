@@ -1,5 +1,3 @@
-// todo: fix return keypress logic for list support
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,15 +42,9 @@ typedef struct {
     double base_wpm;
     double typo_probability;
     double speed_variation;
-    char pause_key;
-    char stop_key;
-    int indent_spaces;
-    double newline_multiplier;
-    double special_char_multiplier;
     double min_delay;
     double max_delay;
-    double pause_variation;
-    double thoughtful_pause_multiplier;
+    double newline_multiplier;
     time_t start_time;    // Track session time
     int chars_typed;      // Track total characters
     int words_typed;      // Track total words
@@ -109,15 +101,12 @@ KeyboardLayout keyboard_layout[KEYBOARD_LAYOUT_SIZE] = {
 // Function prototypes
 void init_simulator(TypingSimulator* sim);
 void cleanup_simulator(TypingSimulator* sim);
-void load_settings(TypingSimulator* sim, const char* filename);
-void save_settings(TypingSimulator* sim, const char* filename);
 double get_typing_delay(TypingSimulator* sim);
 void simulate_keypress(char c);
 void handle_typo(TypingSimulator* sim, char c);
 void process_text(TypingSimulator* sim, const char* text);
 void toggle_pause(TypingSimulator* sim);
 void stop_typing(TypingSimulator* sim);
-void display_settings_menu(TypingSimulator* sim);
 void clear_screen(void);
 
 // Function implementations
@@ -139,15 +128,9 @@ void init_simulator(TypingSimulator* sim) {
     sim->settings.base_wpm = 100;
     sim->settings.typo_probability = 0.2;
     sim->settings.speed_variation = 0.25;
-    sim->settings.pause_key = 'p';
-    sim->settings.stop_key = 's';
-    sim->settings.indent_spaces = DEFAULT_INDENT_SPACES;
-    sim->settings.newline_multiplier = 1.5;
-    sim->settings.special_char_multiplier = 1.2;
     sim->settings.min_delay = 0.0;
     sim->settings.max_delay = 0.05;
-    sim->settings.pause_variation = 0.10;
-    sim->settings.thoughtful_pause_multiplier = 2.0;
+    sim->settings.newline_multiplier = 1.5;
     sim->settings.chars_typed = 0;
     sim->settings.words_typed = 0;
 
@@ -162,17 +145,6 @@ void init_simulator(TypingSimulator* sim) {
 void cleanup_simulator(TypingSimulator* sim) {
     free(sim->typed_output);
     free(sim->error_history);
-}
-
-// TODO: Settings 
-void load_settings(TypingSimulator* sim, const char* filename) {
-    // Implement loading settings from a file
-    // This is a placeholder for future implementation
-}
-
-void save_settings(TypingSimulator* sim, const char* filename) {
-    // Implement saving settings to a file
-    // This is a placeholder for future implementation
 }
 
 double get_typing_delay(TypingSimulator* sim) {
@@ -196,28 +168,28 @@ void simulate_keypress(char c) {
     SHORT vk = VkKeyScanA(c);
     WORD vk_code = vk & 0xFF;
     WORD shift_state = (vk >> 8) & 0xFF;
-    
-    INPUT inputs[4] = {0};  // Max 4 inputs: shift down, key down, key up, shift up
+
+    INPUT inputs[4] = { 0 };  // Max 4 inputs: shift down, key down, key up, shift up
     int input_count = 0;
-    
+
     // If shift is needed (for uppercase or special chars)
     if (shift_state & 1) {
         inputs[input_count].type = INPUT_KEYBOARD;
         inputs[input_count].ki.wVk = VK_SHIFT;
         input_count++;
     }
-    
+
     // Key down
     inputs[input_count].type = INPUT_KEYBOARD;
     inputs[input_count].ki.wVk = vk_code;
     input_count++;
-    
+
     // Key up
     inputs[input_count].type = INPUT_KEYBOARD;
     inputs[input_count].ki.wVk = vk_code;
     inputs[input_count].ki.dwFlags = KEYEVENTF_KEYUP;
     input_count++;
-    
+
     // Release shift if it was pressed
     if (shift_state & 1) {
         inputs[input_count].type = INPUT_KEYBOARD;
@@ -225,7 +197,7 @@ void simulate_keypress(char c) {
         inputs[input_count].ki.dwFlags = KEYEVENTF_KEYUP;
         input_count++;
     }
-    
+
     SendInput(input_count, inputs, sizeof(INPUT));
     Sleep(10);  // Small delay between keystrokes
 }
@@ -240,7 +212,7 @@ void handle_typo(TypingSimulator* sim, char c) {
             break;
         }
     }
-    
+
     simulate_keypress(typo);
     Sleep(100);  // Brief pause
     simulate_keypress('\b');  // Backspace
@@ -253,7 +225,7 @@ void display_typing_recap(TypingSimulator* sim) {
     clear_screen();
     time_t end_time = time(NULL);
     double elapsed_time = difftime(end_time, sim->settings.start_time);
-    
+
     printf("\nstatistics\n");
     printf("please note the WPM calculation is not perfect and will vary slightly.\n");
     printf("===================\n");
@@ -273,7 +245,7 @@ void process_text(TypingSimulator* sim, const char* text) {
     sim->settings.chars_typed = 0;
     sim->settings.words_typed = 0;
     bool in_word = false;
-    
+
     char line[MAX_LINE_LENGTH];
     const char* text_ptr = text;
 
@@ -299,13 +271,15 @@ void process_text(TypingSimulator* sim, const char* text) {
                     sim->settings.words_typed++;
                     in_word = false;
                 }
-            } else {
+            }
+            else {
                 in_word = true;
             }
 
             if ((double)rand() / RAND_MAX < sim->settings.typo_probability) {
                 handle_typo(sim, line[i]);
-            } else {
+            }
+            else {
                 simulate_keypress(line[i]);
             }
 
@@ -320,82 +294,27 @@ void process_text(TypingSimulator* sim, const char* text) {
         }
 
         if (*text_ptr == '\n') {
-            simulate_keypress('\r');
-            simulate_keypress('\n');
+            simulate_keypress('\n');  // Simulate newline only
             text_ptr++;
             Sleep((DWORD)(sim->settings.newline_multiplier * get_typing_delay(sim) * 1000));
         }
     }
 
     display_typing_recap(sim);
+    sim->state = STOPPED;
 }
 
 void toggle_pause(TypingSimulator* sim) {
     if (sim->state == PAUSED) {
         sim->state = RUNNING;
-    } else {
+    }
+    else {
         sim->state = PAUSED;
     }
 }
 
 void stop_typing(TypingSimulator* sim) {
     sim->state = STOPPED;
-}
-
-void display_settings_menu(TypingSimulator* sim) {
-    char settings_choice;
-    do {
-        clear_screen();
-        printf("settings\n");
-        printf("============\n");
-        printf("1. adjust WPM (current: %.0f)\n", sim->settings.base_wpm);
-        printf("2. adjust typo probability (current: %.2f)\n", sim->settings.typo_probability);
-        printf("3. adjust speed variation (current: %.2f)\n", sim->settings.speed_variation);
-        printf("4. return to main menu\n");
-        printf("\nEnter your choice (1-4): ");
-
-        scanf(" %c", &settings_choice);
-        getchar();  // Consume newline
-
-        switch (settings_choice) {
-            case '1': {
-                printf("Enter new WPM (40-200): ");
-                double new_wpm;
-                scanf("%lf", &new_wpm);
-                getchar();
-                if (new_wpm >= 40 && new_wpm <= 200) {
-                    sim->settings.base_wpm = new_wpm;
-                }
-                break;
-            }
-            case '2': {
-                printf("Enter new typo probability (0.0-1.0): ");
-                double new_prob;
-                scanf("%lf", &new_prob);
-                getchar();
-                if (new_prob >= 0.0 && new_prob <= 1.0) {
-                    sim->settings.typo_probability = new_prob;
-                }
-                break;
-            }
-            case '3': {
-                printf("Enter new speed variation (0.0-1.0): ");
-                double new_var;
-                scanf("%lf", &new_var);
-                getchar();
-                if (new_var >= 0.0 && new_var <= 1.0) {
-                    sim->settings.speed_variation = new_var;
-                }
-                break;
-            }
-            case '4':
-                clear_screen();
-                return;
-            default:
-                printf("\ninvalid choice. press any key to continue...");
-                _getch();
-        }
-    } while (settings_choice != '4');
 }
 
 int main() {
@@ -410,49 +329,42 @@ int main() {
         printf("\nhumanizer\n");
         printf("=====================================\n");
         printf("1. start humanizer\n");
-        printf("2. settings\n");
-        printf("3. exit\n");
-        printf("\nenter your choice (1-3): ");
+        printf("2. exit\n");
+        printf("\nenter your choice (1-2): ");
 
         scanf(" %c", &choice);
         getchar();  // Consume newline
 
         switch (choice) {
-            case '1':
-                printf("\nenter text (type 'END' on a new line to finish):\n");
-                int pos = 0;
-                while (pos < MAX_TEXT_LENGTH - 1) {
-                    char line[MAX_LINE_LENGTH];
-                    if (!fgets(line, MAX_LINE_LENGTH, stdin)) break;
-                    if (strcmp(line, "END\n") == 0) break;
-                    strcpy(text + pos, line);
-                    pos += strlen(line);
-                }
-                text[pos] = '\0';
+        case '1':
+            printf("\nenter text (type 'END' on a new line to finish):\n");
+            int pos = 0;
+            while (pos < MAX_TEXT_LENGTH - 1) {
+                char line[MAX_LINE_LENGTH];
+                if (!fgets(line, MAX_LINE_LENGTH, stdin)) break;
+                if (strcmp(line, "END\n") == 0) break;
+                strcpy(text + pos, line);
+                pos += strlen(line);
+            }
+            text[pos] = '\0';
 
-                printf("\npreparing to type in 3 seconds...\n");
-                printf("switch to your target window now!\n");
-                for (int i = 3; i > 0; i--) {
-                    printf("%d...\n", i);
-                    Sleep(1000);
-                }
+            printf("\npreparing to type in 3 seconds...\n");
+            printf("switch to your target window now!\n");
+            for (int i = 3; i > 0; i--) {
+                printf("%d...\n", i);
+                Sleep(1000);
+            }
 
-                process_text(&sim, text);
-                break;
+            process_text(&sim, text);
+            break;
 
-            case '2':
-                // Settings menu
-                display_settings_menu(&sim);
-                break;
+        case '2':
+            printf("\nexiting humanizer\n");
+            cleanup_simulator(&sim);
+            return 0;
 
-            case '3':
-                // Exit program
-                printf("\nexiting humanizer\n");
-                cleanup_simulator(&sim);
-                return 0;
-
-            default:
-                printf("\ninvalid choice. please enter 1, 2, or 3.\n");
+        default:
+            printf("\ninvalid choice. please enter 1 or 2.\n");
         }
     }
 
