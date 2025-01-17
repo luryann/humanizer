@@ -148,16 +148,17 @@ void cleanup_simulator(TypingSimulator* sim) {
 }
 
 double get_typing_delay(TypingSimulator* sim) {
+    // Calculate characters per second based on WPM
     double chars_per_second = (sim->settings.base_wpm * 5.0) / 60.0;
-    double base_delay = 1.0 / (chars_per_second + 0.01);
 
-    double variation_scale = base_delay / 2.0;
-    if (variation_scale > 0.5) variation_scale = 0.5;
+    // Base delay for each character (in seconds)
+    double base_delay = 1.0 / chars_per_second;
 
-    double variation_amount = base_delay * sim->settings.speed_variation * variation_scale;
-    double variation = ((double)rand() / RAND_MAX) * variation_amount * 2 - variation_amount;
-
+    // Apply random variation to simulate natural typing
+    double variation = ((double)rand() / RAND_MAX) * sim->settings.speed_variation * base_delay;
     double final_delay = base_delay + variation;
+
+    // Ensure the delay stays within bounds
     if (final_delay < sim->settings.min_delay) final_delay = sim->settings.min_delay;
     if (final_delay > sim->settings.max_delay) final_delay = sim->settings.max_delay;
 
@@ -249,6 +250,11 @@ void process_text(TypingSimulator* sim, const char* text) {
     char line[MAX_LINE_LENGTH];
     const char* text_ptr = text;
 
+    // Calculate time per word based on base_wpm
+    double time_per_word = 60.0 / sim->settings.base_wpm; // In seconds
+    double chars_per_word = 5.0; // Standard WPM assumption
+    double time_per_char = time_per_word / chars_per_word;
+
     while (*text_ptr && sim->state != STOPPED) {
         int line_len = 0;
         while (*text_ptr && *text_ptr != '\n' && line_len < MAX_LINE_LENGTH - 1) {
@@ -263,8 +269,6 @@ void process_text(TypingSimulator* sim, const char* text) {
                 Sleep(100);
             }
 
-            double delay = get_typing_delay(sim);
-
             // Track words
             if (isspace(line[i])) {
                 if (in_word) {
@@ -276,15 +280,12 @@ void process_text(TypingSimulator* sim, const char* text) {
                 in_word = true;
             }
 
-            if ((double)rand() / RAND_MAX < sim->settings.typo_probability) {
-                handle_typo(sim, line[i]);
-            }
-            else {
-                simulate_keypress(line[i]);
-            }
-
+            // Simulate typing the character
+            simulate_keypress(line[i]);
             sim->settings.chars_typed++;
-            Sleep((DWORD)(delay * 1000));
+
+            // Delay per character to match WPM
+            Sleep((DWORD)(time_per_char * 1000));
         }
 
         // Count the last word in the line if it exists
@@ -294,9 +295,9 @@ void process_text(TypingSimulator* sim, const char* text) {
         }
 
         if (*text_ptr == '\n') {
-            simulate_keypress('\n');  // Simulate newline only
+            simulate_keypress('\n'); // Simulate newline only
             text_ptr++;
-            Sleep((DWORD)(sim->settings.newline_multiplier * get_typing_delay(sim) * 1000));
+            Sleep((DWORD)(time_per_char * chars_per_word * sim->settings.newline_multiplier * 1000));
         }
     }
 
