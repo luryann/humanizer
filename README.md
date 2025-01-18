@@ -1,6 +1,6 @@
 **humanizer**
 
-Application written in C that simulates human-like typing. Currently only works on Windows, macOS will work as well eventually.
+Application written in C that simulates human-like typing.
 
 **Main Features:**
 
