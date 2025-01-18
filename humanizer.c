@@ -8,365 +8,374 @@
 #include <conio.h>
 
 #pragma comment(lib, "user32.lib")
+#pragma comment(lib, "shell32.lib")
 
-// Constants
-#define MAX_TEXT_LENGTH 10000
+// ansi color codes for output formatting
+#define ANSI_COLOR_RED     "\x1b[31m"
+#define ANSI_COLOR_GREEN   "\x1b[32m"
+#define ANSI_COLOR_BLUE    "\x1b[34m"
+#define ANSI_COLOR_RESET   "\x1b[0m"
+
+// constants defining limits for text and file handling
+#define MAX_TEXT_LENGTH 1000000
 #define MAX_LINE_LENGTH 1000
-#define MAX_HISTORY_LENGTH 100
-#define DEFAULT_INDENT_SPACES 3
-#define KEYBOARD_LAYOUT_SIZE 26
+#define PROGRESS_BAR_WIDTH 50
 
-// Enums
-typedef enum {
-    RUNNING,
-    PAUSED,
-    STOPPED
-} TypingState;
+// base words per minute (wpm) and adjustment for accuracy
+#define BASE_WPM 85
+#define WPM_ADJUSTMENT 15 // adjustment for actual typing speed based on accuracy
 
-typedef enum {
-    NONE,
-    BULLET,
-    NUMBERED
-} ListType;
+#define MAX_PATH_LENGTH 260
+#define SUPPORTED_EXTENSIONS ".txt\0.doc\0.docx\0"
 
-// Structures
+// structure to store typing statistics
 typedef struct {
-    bool in_list;
-    int current_level;
-    ListType list_type;
-    int number_counter[10];
-    int last_indent;
-} ListState;
+    double current_wpm;  // current words per minute
+    int chars_typed;     // number of characters typed
+    int words_typed;     // number of words typed
+    time_t start_time;   // start time for typing simulation
+    double elapsed_time; // elapsed time since typing started
+} TypingStats;
 
+// structure for the typing simulator, including text and stats
 typedef struct {
-    double base_wpm;
-    double typo_probability;
-    double speed_variation;
-    double min_delay;
-    double max_delay;
-    double newline_multiplier;
-    time_t start_time;    // Track session time
-    int chars_typed;      // Track total characters
-    int words_typed;      // Track total words
-} Settings;
-
-typedef struct {
-    TypingState state;
-    int typo_count;
-    char* typed_output;
-    int output_length;
-    int* error_history;
-    int history_length;
-    ListState list_state;
-    int word_count;
-    double actual_typing_time;
-    Settings settings;
+    char* text;          // pointer to the text being typed
+    size_t length;       // length of the text
+    TypingStats stats;   // typing statistics for the simulation
 } TypingSimulator;
 
-// Keyboard layout for typos
-typedef struct {
-    char key;
-    const char* adjacent;
-} KeyboardLayout;
-
-KeyboardLayout keyboard_layout[KEYBOARD_LAYOUT_SIZE] = {
-    {'a', "qwsz"},
-    {'b', "vghn"},
-    {'c', "xdfv"},
-    {'d', "erfcxs"},
-    {'e', "wrsdf"},
-    {'f', "rtgvcd"},
-    {'g', "tyhbvf"},
-    {'h', "yujnbg"},
-    {'i', "ujklo"},
-    {'j', "uikmnh"},
-    {'k', "ioljm"},
-    {'l', "opk"},
-    {'m', "njk"},
-    {'n', "bhjm"},
-    {'o', "ipkl"},
-    {'p', "o[l"},
-    {'q', "was"},
-    {'r', "etdfg"},
-    {'s', "awedxz"},
-    {'t', "ryfgh"},
-    {'u', "yihjk"},
-    {'v', "cfgb"},
-    {'w', "qeasd"},
-    {'x', "zsdc"},
-    {'y', "tughj"},
-    {'z', "asx"}
-};
-
-// Function prototypes
+// function prototypes
 void init_simulator(TypingSimulator* sim);
 void cleanup_simulator(TypingSimulator* sim);
-double get_typing_delay(TypingSimulator* sim);
-void simulate_keypress(char c);
-void handle_typo(TypingSimulator* sim, char c);
-void process_text(TypingSimulator* sim, const char* text);
-void toggle_pause(TypingSimulator* sim);
-void stop_typing(TypingSimulator* sim);
+void display_progress_bar(int current, int total);
+bool load_file_content(const char* filepath, TypingSimulator* sim);
+void update_typing_stats(TypingStats* stats);
+void display_typing_stats(TypingStats* stats);
+void simulate_typing(TypingSimulator* sim);
+bool is_supported_file_type(const char* filepath);
+void handle_input_choice(TypingSimulator* sim);
+void handle_manual_input(TypingSimulator* sim);
+void handle_file_drop(TypingSimulator* sim);
 void clear_screen(void);
 
-// Function implementations
+// clear the console screen
 void clear_screen() {
     system("cls");
 }
 
-void init_simulator(TypingSimulator* sim) {
-    sim->state = STOPPED;
-    sim->typo_count = 0;
-    sim->typed_output = (char*)malloc(MAX_TEXT_LENGTH);
-    sim->output_length = 0;
-    sim->error_history = (int*)malloc(MAX_HISTORY_LENGTH * sizeof(int));
-    sim->history_length = 0;
-    sim->word_count = 0;
-    sim->actual_typing_time = 0;
-
-    // Initialize default settings
-    sim->settings.base_wpm = 100;
-    sim->settings.typo_probability = 0.2;
-    sim->settings.speed_variation = 0.25;
-    sim->settings.min_delay = 0.0;
-    sim->settings.max_delay = 0.05;
-    sim->settings.newline_multiplier = 1.5;
-    sim->settings.chars_typed = 0;
-    sim->settings.words_typed = 0;
-
-    // Initialize list state
-    sim->list_state.in_list = false;
-    sim->list_state.current_level = 0;
-    sim->list_state.list_type = NONE;
-    sim->list_state.last_indent = 0;
-    memset(sim->list_state.number_counter, 0, sizeof(sim->list_state.number_counter));
-}
-
-void cleanup_simulator(TypingSimulator* sim) {
-    free(sim->typed_output);
-    free(sim->error_history);
-}
-
-double get_typing_delay(TypingSimulator* sim) {
-    // Calculate characters per second based on WPM
-    double chars_per_second = (sim->settings.base_wpm * 5.0) / 60.0;
-
-    // Base delay for each character (in seconds)
-    double base_delay = 1.0 / chars_per_second;
-
-    // Apply random variation to simulate natural typing
-    double variation = ((double)rand() / RAND_MAX) * sim->settings.speed_variation * base_delay;
-    double final_delay = base_delay + variation;
-
-    // Ensure the delay stays within bounds
-    if (final_delay < sim->settings.min_delay) final_delay = sim->settings.min_delay;
-    if (final_delay > sim->settings.max_delay) final_delay = sim->settings.max_delay;
-
-    return final_delay;
-}
-
-void simulate_keypress(char c) {
-    SHORT vk = VkKeyScanA(c);
-    WORD vk_code = vk & 0xFF;
-    WORD shift_state = (vk >> 8) & 0xFF;
-
-    INPUT inputs[4] = { 0 };  // Max 4 inputs: shift down, key down, key up, shift up
-    int input_count = 0;
-
-    // If shift is needed (for uppercase or special chars)
-    if (shift_state & 1) {
-        inputs[input_count].type = INPUT_KEYBOARD;
-        inputs[input_count].ki.wVk = VK_SHIFT;
-        input_count++;
-    }
-
-    // Key down
-    inputs[input_count].type = INPUT_KEYBOARD;
-    inputs[input_count].ki.wVk = vk_code;
-    input_count++;
-
-    // Key up
-    inputs[input_count].type = INPUT_KEYBOARD;
-    inputs[input_count].ki.wVk = vk_code;
-    inputs[input_count].ki.dwFlags = KEYEVENTF_KEYUP;
-    input_count++;
-
-    // Release shift if it was pressed
-    if (shift_state & 1) {
-        inputs[input_count].type = INPUT_KEYBOARD;
-        inputs[input_count].ki.wVk = VK_SHIFT;
-        inputs[input_count].ki.dwFlags = KEYEVENTF_KEYUP;
-        input_count++;
-    }
-
-    SendInput(input_count, inputs, sizeof(INPUT));
-    Sleep(10);  // Small delay between keystrokes
-}
-
-void handle_typo(TypingSimulator* sim, char c) {
-    // Find adjacent keys for the current character
-    char typo = c;  // Default to same character if no adjacents found
-    for (int i = 0; i < KEYBOARD_LAYOUT_SIZE; i++) {
-        if (tolower(c) == keyboard_layout[i].key) {
-            int adj_len = strlen(keyboard_layout[i].adjacent);
-            typo = keyboard_layout[i].adjacent[rand() % adj_len];
-            break;
+// display the progress bar in the console
+void display_progress_bar(int current, int total) {
+    int progress = (int)((double)current / total * PROGRESS_BAR_WIDTH);
+    printf(ANSI_COLOR_BLUE "\rpreparing: [" ANSI_COLOR_RESET);
+    // draw progress bar with green '#' for progress
+    for (int i = 0; i < PROGRESS_BAR_WIDTH; i++) {
+        if (i < progress) {
+            printf(ANSI_COLOR_GREEN "#" ANSI_COLOR_RESET);
+        }
+        else {
+            printf(" ");
         }
     }
-
-    simulate_keypress(typo);
-    Sleep(100);  // Brief pause
-    simulate_keypress('\b');  // Backspace
-    Sleep(50);
-    simulate_keypress(c);  // Correct character
-    sim->typo_count++;
+    // print the percentage completion
+    printf("] %d%%", (int)((double)current / total * 100));
+    fflush(stdout);
 }
 
-void display_typing_recap(TypingSimulator* sim) {
-    clear_screen();
-    time_t end_time = time(NULL);
-    double elapsed_time = difftime(end_time, sim->settings.start_time);
-
-    printf("\nstatistics\n");
-    printf("please note the WPM calculation is not perfect and will vary slightly.\n");
-    printf("===================\n");
-    printf("total time: %.1f seconds\n", elapsed_time);
-    printf("characters typed: %d\n", sim->settings.chars_typed);
-    printf("words typed: %d\n", sim->settings.words_typed);
-    printf("average WPM: %.1f\n", (sim->settings.words_typed / (elapsed_time / 60.0)));
-    printf("typos made: %d\n", sim->typo_count);
-    printf("\npress any key to continue...");
-    _getch();
-    clear_screen();
+// update typing statistics such as current words per minute (wpm)
+void update_typing_stats(TypingStats* stats) {
+    stats->elapsed_time = difftime(time(NULL), stats->start_time);
+    if (stats->elapsed_time > 0) {
+        stats->current_wpm = (stats->words_typed / (stats->elapsed_time / 60.0));
+    }
 }
 
-void process_text(TypingSimulator* sim, const char* text) {
-    sim->state = RUNNING;
-    sim->settings.start_time = time(NULL);
-    sim->settings.chars_typed = 0;
-    sim->settings.words_typed = 0;
+// display the current typing statistics on the console
+void display_typing_stats(TypingStats* stats) {
+    printf(ANSI_COLOR_BLUE "\rcurrent wpm: %.1f | chars typed: %d | words: %d | time: %.1fs" ANSI_COLOR_RESET,
+        stats->current_wpm, stats->chars_typed, stats->words_typed, stats->elapsed_time);
+    fflush(stdout);
+}
+
+// handle the manual input mode where the user types/pastes text
+void handle_manual_input(TypingSimulator* sim) {
+    clear_screen();  // Clear screen before displaying manual input prompt
+    printf("\nenter your text (type 'END' on a new line to finish):\n");
+
+    char* temp_buffer = (char*)malloc(MAX_TEXT_LENGTH); // buffer for storing user input text
+    if (!temp_buffer) {
+        printf(ANSI_COLOR_RED "error: memory allocation failed\n" ANSI_COLOR_RESET);
+        return;
+    }
+
+    int pos = 0;
+    while (pos < MAX_TEXT_LENGTH - 1) {
+        char line[MAX_LINE_LENGTH];
+        if (!fgets(line, MAX_LINE_LENGTH, stdin)) break; // read user input
+        if (strcmp(line, "END\n") == 0) break; // check if user typed 'END' to stop input
+
+        int line_len = strlen(line);
+        if (pos + line_len >= MAX_TEXT_LENGTH) {
+            printf(ANSI_COLOR_RED "error: text too long\n" ANSI_COLOR_RESET);
+            free(temp_buffer);
+            return;
+        }
+
+        strcpy(temp_buffer + pos, line); // append line to buffer
+        pos += line_len;
+    }
+
+    if (pos == 0) {
+        printf(ANSI_COLOR_RED "error: no text entered\n" ANSI_COLOR_RESET);
+        free(temp_buffer);
+        return;
+    }
+
+    sim->text = temp_buffer;
+    sim->length = pos;
+
+    simulate_typing(sim); // simulate typing with the entered text
+}
+
+// check if the file extension is supported for loading
+bool is_supported_file_type(const char* filepath) {
+    char* ext = strrchr(filepath, '.');
+    if (!ext) return false; // no file extension found
+
+    char* supported = strdup(SUPPORTED_EXTENSIONS); // supported file extensions list
+    char* token = strtok(supported, "\0"); // split extensions
+
+    while (token != NULL) {
+        if (_stricmp(ext, token) == 0) { // compare file extension with supported types
+            free(supported);
+            return true;
+        }
+        token = strtok(NULL, "\0");
+    }
+
+    free(supported);
+    return false;
+}
+
+// load the content of a file into the simulator's text buffer
+bool load_file_content(const char* filepath, TypingSimulator* sim) {
+    if (!is_supported_file_type(filepath)) { // check if file type is supported
+        printf(ANSI_COLOR_RED "error: unsupported file type\n" ANSI_COLOR_RESET);
+        return false;
+    }
+
+    FILE* file = fopen(filepath, "r"); // open the file for reading
+    if (!file) {
+        printf(ANSI_COLOR_RED "error: could not open file\n" ANSI_COLOR_RESET);
+        return false;
+    }
+
+    fseek(file, 0, SEEK_END); // move to end of file to get size
+    long file_size = ftell(file);
+    rewind(file); // rewind to the start of the file
+
+    if (file_size == 0) {
+        printf(ANSI_COLOR_RED "error: file is empty\n" ANSI_COLOR_RESET);
+        fclose(file);
+        return false;
+    }
+
+    if (file_size > MAX_TEXT_LENGTH) { // check if file size exceeds max allowed length
+        printf(ANSI_COLOR_RED "error: file too large\n" ANSI_COLOR_RESET);
+        fclose(file);
+        return false;
+    }
+
+    sim->text = (char*)malloc(file_size + 1); // allocate memory for file content
+    if (!sim->text) {
+        printf(ANSI_COLOR_RED "error: memory allocation failed\n" ANSI_COLOR_RESET);
+        fclose(file);
+        return false;
+    }
+
+    size_t read_size = fread(sim->text, 1, file_size, file); // read file content
+    sim->text[read_size] = '\0'; // null-terminate the text
+    sim->length = read_size;
+
+    fclose(file);
+    return true;
+}
+
+// simulate the typing process, typing each character with delay
+void simulate_typing(TypingSimulator* sim) {
+    clear_screen();  // Clear screen before displaying typing progress
+    printf("preparing to type...\n");
+    printf("switch to your target window now!\n\n");
+
+    // display progress bar as preparation for typing
+    for (int i = 0; i <= 100; i++) {
+        display_progress_bar(i, 100);
+        Sleep(30); // wait for 30ms (3 seconds total)
+    }
+    printf("\n\n");
+
+    sim->stats.start_time = time(NULL); // set the start time for typing
     bool in_word = false;
 
-    char line[MAX_LINE_LENGTH];
-    const char* text_ptr = text;
-
-    // Calculate time per word based on base_wpm
-    double time_per_word = 60.0 / sim->settings.base_wpm; // In seconds
-    double chars_per_word = 5.0; // Standard WPM assumption
+    // define typing speed and time per character
+    double time_per_word = 60.0 / (BASE_WPM + WPM_ADJUSTMENT);
+    double chars_per_word = 5.0;
     double time_per_char = time_per_word / chars_per_word;
 
-    while (*text_ptr && sim->state != STOPPED) {
-        int line_len = 0;
-        while (*text_ptr && *text_ptr != '\n' && line_len < MAX_LINE_LENGTH - 1) {
-            line[line_len++] = *text_ptr++;
-        }
-        line[line_len] = '\0';
-
-        for (int i = 0; i < line_len; i++) {
-            if (sim->state == STOPPED) break;
-
-            while (sim->state == PAUSED) {
-                Sleep(100);
+    // simulate typing each character from the loaded text
+    for (size_t i = 0; i < sim->length; i++) {
+        if (isspace(sim->text[i])) { // check for word boundaries
+            if (in_word) {
+                sim->stats.words_typed++; // increment word count when space is encountered
+                in_word = false;
             }
-
-            // Track words
-            if (isspace(line[i])) {
-                if (in_word) {
-                    sim->settings.words_typed++;
-                    in_word = false;
-                }
-            }
-            else {
-                in_word = true;
-            }
-
-            // Simulate typing the character
-            simulate_keypress(line[i]);
-            sim->settings.chars_typed++;
-
-            // Delay per character to match WPM
-            Sleep((DWORD)(time_per_char * 1000));
+        }
+        else {
+            in_word = true;
         }
 
-        // Count the last word in the line if it exists
-        if (in_word) {
-            sim->settings.words_typed++;
-            in_word = false;
+        // simulate key press for the current character
+        SHORT vk = VkKeyScanA(sim->text[i]);
+        WORD vk_code = vk & 0xFF;
+        WORD shift_state = (vk >> 8) & 0xFF;
+
+        INPUT inputs[4] = { 0 };
+        int input_count = 0;
+
+        // simulate SHIFT key press if required
+        if (shift_state & 1) {
+            inputs[input_count].type = INPUT_KEYBOARD;
+            inputs[input_count].ki.wVk = VK_SHIFT;
+            input_count++;
         }
 
-        if (*text_ptr == '\n') {
-            simulate_keypress('\n'); // Simulate newline only
-            text_ptr++;
-            Sleep((DWORD)(time_per_char * chars_per_word * sim->settings.newline_multiplier * 1000));
+        // simulate key press for character
+        inputs[input_count].type = INPUT_KEYBOARD;
+        inputs[input_count].ki.wVk = vk_code;
+        input_count++;
+
+        // simulate key release for character
+        inputs[input_count].type = INPUT_KEYBOARD;
+        inputs[input_count].ki.wVk = vk_code;
+        inputs[input_count].ki.dwFlags = KEYEVENTF_KEYUP;
+        input_count++;
+
+        // simulate SHIFT key release if required
+        if (shift_state & 1) {
+            inputs[input_count].type = INPUT_KEYBOARD;
+            inputs[input_count].ki.wVk = VK_SHIFT;
+            inputs[input_count].ki.dwFlags = KEYEVENTF_KEYUP;
+            input_count++;
         }
+
+        SendInput(input_count, inputs, sizeof(INPUT)); // send input to system
+        sim->stats.chars_typed++; // increment typed character count
+
+        update_typing_stats(&sim->stats); // update statistics
+        display_typing_stats(&sim->stats); // display statistics
+
+        Sleep((DWORD)(time_per_char * 1000)); // delay between characters
     }
 
-    display_typing_recap(sim);
-    sim->state = STOPPED;
-}
-
-void toggle_pause(TypingSimulator* sim) {
-    if (sim->state == PAUSED) {
-        sim->state = RUNNING;
+    if (in_word) {
+        sim->stats.words_typed++; // increment word count if last word wasn't followed by space
     }
-    else {
-        sim->state = PAUSED;
+
+    printf("\n\ntyping complete!\n");
+}
+
+// handle the file drop or file path input from the user
+void handle_file_drop(TypingSimulator* sim) {
+    clear_screen();  // Clear screen before asking for file input
+    char filepath[MAX_PATH_LENGTH];
+    printf("enter file path or drag file here: ");
+    fgets(filepath, MAX_PATH_LENGTH, stdin);
+
+    // remove newline character
+    filepath[strcspn(filepath, "\n")] = 0;
+
+    if (strcmp(filepath, "exit") == 0) {
+        exit(0); // exit the program if user typed "exit"
+    }
+
+    // remove quotes from filepath if present
+    if (filepath[0] == '"') {
+        memmove(filepath, filepath + 1, strlen(filepath));
+        filepath[strlen(filepath) - 1] = '\0';
+    }
+
+    // load the file content and simulate typing
+    if (load_file_content(filepath, sim)) {
+        simulate_typing(sim);
     }
 }
 
-void stop_typing(TypingSimulator* sim) {
-    sim->state = STOPPED;
-}
+// handle user choice for input method (manual text or file)
+void handle_input_choice(TypingSimulator* sim) {
+    printf("\nselect input method:\n");
+    printf("1. type/paste text\n");
+    printf("2. drag and drop file\n");
+    printf("3. exit\n");
+    printf("\nenter your choice (1-3): ");
 
-int main() {
-    TypingSimulator sim;
     char choice;
-    char text[MAX_TEXT_LENGTH];
+    scanf(" %c", &choice);
+    getchar(); // consume newline after choice
 
+    switch (choice) {
+    case '1':
+        handle_manual_input(sim); // handle manual input
+        break;
+    case '2':
+        handle_file_drop(sim); // handle file drop
+        break;
+    case '3':
+        exit(0); // exit the program
+    default:
+        printf(ANSI_COLOR_RED "invalid choice. please try again.\n" ANSI_COLOR_RESET);
+    }
+}
+
+// initialize the typing simulator with default values
+void init_simulator(TypingSimulator* sim) {
+    sim->text = NULL;
+    sim->length = 0;
+    sim->stats.chars_typed = 0;
+    sim->stats.words_typed = 0;
+    sim->stats.current_wpm = 0;
+    sim->stats.elapsed_time = 0;
+}
+
+// clean up resources used by the simulator
+void cleanup_simulator(TypingSimulator* sim) {
+    if (sim->text) {
+        free(sim->text); // free allocated memory for text
+        sim->text = NULL;
+    }
+}
+
+// main function
+int main() {
+    // enable ansi escape sequences for color in console
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    DWORD dwMode = 0;
+    GetConsoleMode(hOut, &dwMode);
+    dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+    SetConsoleMode(hOut, dwMode);
+
+    TypingSimulator sim;
     init_simulator(&sim);
-    srand((unsigned int)time(NULL));
+    clear_screen();
+    printf(ANSI_COLOR_BLUE "humanizer typing simulator\n" ANSI_COLOR_RESET);
+    printf("============================\n");
+    printf("base wpm: %d (actual wpm: %d)\n", BASE_WPM, BASE_WPM + WPM_ADJUSTMENT);
+    printf("supported file types: txt, doc, docx\n");
 
+    // main program loop
     while (1) {
-        printf("\nhumanizer\n");
-        printf("=====================================\n");
-        printf("1. start humanizer\n");
-        printf("2. exit\n");
-        printf("\nenter your choice (1-2): ");
-
-        scanf(" %c", &choice);
-        getchar();  // Consume newline
-
-        switch (choice) {
-        case '1':
-            printf("\nenter text (type 'END' on a new line to finish):\n");
-            int pos = 0;
-            while (pos < MAX_TEXT_LENGTH - 1) {
-                char line[MAX_LINE_LENGTH];
-                if (!fgets(line, MAX_LINE_LENGTH, stdin)) break;
-                if (strcmp(line, "END\n") == 0) break;
-                strcpy(text + pos, line);
-                pos += strlen(line);
-            }
-            text[pos] = '\0';
-
-            printf("\npreparing to type in 3 seconds...\n");
-            printf("switch to your target window now!\n");
-            for (int i = 3; i > 0; i--) {
-                printf("%d...\n", i);
-                Sleep(1000);
-            }
-
-            process_text(&sim, text);
-            break;
-
-        case '2':
-            printf("\nexiting humanizer\n");
-            cleanup_simulator(&sim);
-            return 0;
-
-        default:
-            printf("\ninvalid choice. please enter 1 or 2.\n");
-        }
+        handle_input_choice(&sim); // handle user input choice
+        cleanup_simulator(&sim); // cleanup after each session
+        init_simulator(&sim); // reinitialize for next session
+        printf("\n");
     }
 
     return 0;
