@@ -13,8 +13,8 @@ Application written in C that simulates human-like typing.
   - Open source (duh)
 - Lightweight
   - Only around 400 lines of code
-  - Executable is only 140kb
-  - Uses around 700 kb of ram during operation
+  - Executable is only 14kb
+  - Uses around 700 kb of RAM during operation
 - Robust error handling
 - Real time statistics calculation  
    
