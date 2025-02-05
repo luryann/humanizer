@@ -10,79 +10,78 @@
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
 
-// stop the compiler from complaining about unsafe string functions
+// Stop the compiler from complaining about unsafe string functions
 #define _CRT_SECURE_NO_WARNINGS
 
-// ansi color codes for output formatting
+// ANSI color codes for output formatting
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
 #define ANSI_COLOR_BLUE    "\x1b[34m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-// constants defining limits for text and file handling
+// Constants defining limits for text and file handling
 #define MAX_TEXT_LENGTH 1000000
 #define MAX_LINE_LENGTH 1000
 #define PROGRESS_BAR_WIDTH 50
 
-// base words per minute (wpm) and adjustment for accuracy
+// Base words per minute (WPM) and adjustment for accuracy
 #define BASE_WPM 100
-#define WPM_ADJUSTMENT 15 // adjustment for actual typing speed based on accuracy
+#define WPM_ADJUSTMENT 15 // Adjustment for actual typing speed based on accuracy
 
 #define MAX_PATH_LENGTH 260
 #define SUPPORTED_EXTENSIONS ".txt\0.doc\0.docx\0"
 
-// structure to store typing statistics
+// Structure to store typing statistics
 typedef struct {
-    double current_wpm;    // current words per minute
-    size_t chars_typed;    // number of characters typed
-    size_t words_typed;    // number of words typed
-    time_t start_time;     // start time for typing simulation
-    double elapsed_time;   // elapsed time since typing started
+    double current_wpm;    // Current words per minute
+    size_t chars_typed;    // Number of characters typed
+    size_t words_typed;    // Number of words typed
+    time_t start_time;     // Start time for typing simulation
+    double elapsed_time;   // Elapsed time since typing started
 } TypingStats;
 
-// structure for the typing simulator, including text and stats
+// Structure for the typing simulator, including text and stats
 typedef struct {
-    char* text;            // pointer to the text being typed
-    size_t length;         // length of the text
-    TypingStats stats;     // typing statistics for the simulation
+    char* text;            // Pointer to the text being typed
+    size_t length;         // Length of the text
+    TypingStats stats;     // Typing statistics for the simulation
 } TypingSimulator;
 
-// function prototypes
-void init_simulator(TypingSimulator* sim);
-void cleanup_simulator(TypingSimulator* sim);
-void display_progress_bar(size_t current, size_t total);
-bool load_file_content(const char* filepath, TypingSimulator* sim);
-void update_typing_stats(TypingStats* stats);
-void display_typing_stats(TypingStats* stats);
-void simulate_typing(TypingSimulator* sim);
-bool is_supported_file_type(const char* filepath);
-void handle_input_choice(TypingSimulator* sim);
-void handle_manual_input(TypingSimulator* sim);
-void handle_file_drop(TypingSimulator* sim);
-void clear_screen(void);
-void clear_input_buffer(void);
+// Function prototypes
+void InitializeSimulator(TypingSimulator* simulator);
+void CleanupSimulator(TypingSimulator* simulator);
+void DisplayProgressBar(size_t current, size_t total);
+bool LoadFileContent(const char* filepath, TypingSimulator* simulator);
+void UpdateTypingStats(TypingStats* stats);
+void DisplayTypingStats(TypingStats* stats);
+void SimulateTyping(TypingSimulator* simulator);
+bool IsSupportedFileType(const char* filepath);
+void HandleInputChoice(TypingSimulator* simulator);
+void HandleManualInput(TypingSimulator* simulator);
+void HandleFileDrop(TypingSimulator* simulator);
+void ClearScreen(void);
+void ClearInputBuffer(void);
 
-// clear the console screen
-void clear_screen(void) {
+// Clear the console screen
+void ClearScreen(void) {
     system("cls");
 }
 
-// clear input buffer safely
-void clear_input_buffer(void) {
+// Clear input buffer safely
+void ClearInputBuffer(void) {
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
 }
 
-// display the progress bar in the console
-void display_progress_bar(size_t current, size_t total) {
+// Display the progress bar in the console
+void DisplayProgressBar(size_t current, size_t total) {
     size_t progress = (size_t)((double)current / total * PROGRESS_BAR_WIDTH);
-    printf(ANSI_COLOR_BLUE "\rpreparing: [" ANSI_COLOR_RESET);
+    printf(ANSI_COLOR_BLUE "\rPreparing: [" ANSI_COLOR_RESET);
 
     for (size_t i = 0; i < PROGRESS_BAR_WIDTH; i++) {
         if (i < progress) {
             printf(ANSI_COLOR_GREEN "#" ANSI_COLOR_RESET);
-        }
-        else {
+        } else {
             printf(" ");
         }
     }
@@ -91,29 +90,29 @@ void display_progress_bar(size_t current, size_t total) {
     fflush(stdout);
 }
 
-// update typing statistics such as current words per minute (wpm)
-void update_typing_stats(TypingStats* stats) {
+// Update typing statistics such as current words per minute (WPM)
+void UpdateTypingStats(TypingStats* stats) {
     stats->elapsed_time = difftime(time(NULL), stats->start_time);
     if (stats->elapsed_time > 0) {
         stats->current_wpm = (double)stats->words_typed / (stats->elapsed_time / 60.0);
     }
 }
 
-// display the current typing statistics on the console
-void display_typing_stats(TypingStats* stats) {
-    printf(ANSI_COLOR_BLUE "\rcurrent wpm: %.1f | chars typed: %zu | words: %zu | time: %.1fs" ANSI_COLOR_RESET,
-        stats->current_wpm, stats->chars_typed, stats->words_typed, stats->elapsed_time);
+// Display the current typing statistics on the console
+void DisplayTypingStats(TypingStats* stats) {
+    printf(ANSI_COLOR_BLUE "\rCurrent WPM: %.1f | Chars Typed: %zu | Words: %zu | Time: %.1fs" ANSI_COLOR_RESET,
+           stats->current_wpm, stats->chars_typed, stats->words_typed, stats->elapsed_time);
     fflush(stdout);
 }
 
-// handle the manual input mode where the user types/pastes text
-void handle_manual_input(TypingSimulator* sim) {
-    clear_screen();
-    printf("\nenter your text (type 'END' on a new line to finish):\n");
+// Handle the manual input mode where the user types/pastes text
+void HandleManualInput(TypingSimulator* simulator) {
+    ClearScreen();
+    printf("\nEnter your text (type 'END' on a new line to finish):\n");
 
     char* temp_buffer = (char*)malloc(MAX_TEXT_LENGTH);
     if (!temp_buffer) {
-        printf(ANSI_COLOR_RED "error: memory allocation failed\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: Memory allocation failed\n" ANSI_COLOR_RESET);
         return;
     }
     memset(temp_buffer, 0, MAX_TEXT_LENGTH);
@@ -132,14 +131,14 @@ void handle_manual_input(TypingSimulator* sim) {
 
         size_t line_len = strlen(line);
         if (pos + line_len >= MAX_TEXT_LENGTH) {
-            printf(ANSI_COLOR_RED "error: text too long\n" ANSI_COLOR_RESET);
+            printf(ANSI_COLOR_RED "Error: Text too long\n" ANSI_COLOR_RESET);
             free(temp_buffer);
             return;
         }
 
         errno_t err = strcpy_s(temp_buffer + pos, MAX_TEXT_LENGTH - pos, line);
         if (err != 0) {
-            printf(ANSI_COLOR_RED "error: failed to copy text (error: %d)\n" ANSI_COLOR_RESET, err);
+            printf(ANSI_COLOR_RED "Error: Failed to copy text (error: %d)\n" ANSI_COLOR_RESET, err);
             free(temp_buffer);
             return;
         }
@@ -148,19 +147,19 @@ void handle_manual_input(TypingSimulator* sim) {
     }
 
     if (pos == 0) {
-        printf(ANSI_COLOR_RED "error: no text entered\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: No text entered\n" ANSI_COLOR_RESET);
         free(temp_buffer);
         return;
     }
 
-    sim->text = temp_buffer;
-    sim->length = pos;
+    simulator->text = temp_buffer;
+    simulator->length = pos;
 
-    simulate_typing(sim);
+    SimulateTyping(simulator);
 }
 
-// check if the file extension is supported for loading
-bool is_supported_file_type(const char* filepath) {
+// Check if the file extension is supported for loading
+bool IsSupportedFileType(const char* filepath) {
     const char* ext = strrchr(filepath, '.');
     if (!ext) {
         return false;
@@ -185,17 +184,17 @@ bool is_supported_file_type(const char* filepath) {
     return false;
 }
 
-// load the content of a file into the simulator's text buffer
-bool load_file_content(const char* filepath, TypingSimulator* sim) {
-    if (!is_supported_file_type(filepath)) {
-        printf(ANSI_COLOR_RED "error: unsupported file type\n" ANSI_COLOR_RESET);
+// Load the content of a file into the simulator's text buffer
+bool LoadFileContent(const char* filepath, TypingSimulator* simulator) {
+    if (!IsSupportedFileType(filepath)) {
+        printf(ANSI_COLOR_RED "Error: Unsupported file type\n" ANSI_COLOR_RESET);
         return false;
     }
 
     FILE* file = NULL;
     errno_t err = fopen_s(&file, filepath, "r");
     if (err != 0 || file == NULL) {
-        printf(ANSI_COLOR_RED "error: could not open file\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: Could not open file\n" ANSI_COLOR_RESET);
         return false;
     }
 
@@ -204,71 +203,70 @@ bool load_file_content(const char* filepath, TypingSimulator* sim) {
     rewind(file);
 
     if (file_size == 0) {
-        printf(ANSI_COLOR_RED "error: file is empty\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: File is empty\n" ANSI_COLOR_RESET);
         fclose(file);
         return false;
     }
 
     if (file_size > MAX_TEXT_LENGTH - 1) {
-        printf(ANSI_COLOR_RED "error: file too large\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: File too large\n" ANSI_COLOR_RESET);
         fclose(file);
         return false;
     }
 
     char* temp_buffer = (char*)malloc(file_size + 1);
     if (!temp_buffer) {
-        printf(ANSI_COLOR_RED "error: memory allocation failed\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: Memory allocation failed\n" ANSI_COLOR_RESET);
         fclose(file);
         return false;
     }
 
     size_t read_size = fread(temp_buffer, 1, file_size, file);
     if (read_size != file_size) {
-        printf(ANSI_COLOR_RED "error: failed to read file\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: Failed to read file\n" ANSI_COLOR_RESET);
         free(temp_buffer);
         fclose(file);
         return false;
     }
 
     temp_buffer[read_size] = '\0';
-    sim->text = temp_buffer;
-    sim->length = read_size;
+    simulator->text = temp_buffer;
+    simulator->length = read_size;
 
     fclose(file);
     return true;
 }
 
-// simulate the typing process, typing each character with delay
-void simulate_typing(TypingSimulator* sim) {
-    clear_screen();
-    printf("preparing to type...\n");
-    printf("switch to your target window now!\n\n");
+// Simulate the typing process, typing each character with delay
+void SimulateTyping(TypingSimulator* simulator) {
+    ClearScreen();
+    printf("Preparing to type...\n");
+    printf("Switch to your target window now!\n\n");
 
     for (size_t i = 0; i <= 100; i++) {
-        display_progress_bar(i, 100);
+        DisplayProgressBar(i, 100);
         Sleep(30);
     }
     printf("\n\n");
 
-    sim->stats.start_time = time(NULL);
+    simulator->stats.start_time = time(NULL);
     bool in_word = false;
 
     double time_per_word = 60.0 / (BASE_WPM + WPM_ADJUSTMENT);
     double chars_per_word = 5.0;
     double time_per_char = time_per_word / chars_per_word;
 
-    for (size_t i = 0; i < sim->length; i++) {
-        if (isspace((unsigned char)sim->text[i])) {
+    for (size_t i = 0; i < simulator->length; i++) {
+        if (isspace((unsigned char)simulator->text[i])) {
             if (in_word) {
-                sim->stats.words_typed++;
+                simulator->stats.words_typed++;
                 in_word = false;
             }
-        }
-        else {
+        } else {
             in_word = true;
         }
 
-        SHORT vk = VkKeyScanA(sim->text[i]);
+        SHORT vk = VkKeyScanA(simulator->text[i]);
         WORD vk_code = vk & 0xFF;
         WORD shift_state = (vk >> 8) & 0xFF;
 
@@ -298,29 +296,29 @@ void simulate_typing(TypingSimulator* sim) {
         }
 
         SendInput(input_count, inputs, sizeof(INPUT));
-        sim->stats.chars_typed++;
+        simulator->stats.chars_typed++;
 
-        update_typing_stats(&sim->stats);
-        display_typing_stats(&sim->stats);
+        UpdateTypingStats(&simulator->stats);
+        DisplayTypingStats(&simulator->stats);
 
         Sleep((DWORD)(time_per_char * 1000));
     }
 
     if (in_word) {
-        sim->stats.words_typed++;
+        simulator->stats.words_typed++;
     }
 
-    printf("\n\ntyping complete!\n");
+    printf("\n\nTyping complete!\n");
 }
 
-// handle the file drop or file path input from the user
-void handle_file_drop(TypingSimulator* sim) {
-    clear_screen();
+// Handle the file drop or file path input from the user
+void HandleFileDrop(TypingSimulator* simulator) {
+    ClearScreen();
     char filepath[MAX_PATH_LENGTH];
-    printf("enter file path or drag file here: ");
+    printf("Enter file path or drag file here: ");
 
     if (!fgets(filepath, MAX_PATH_LENGTH, stdin)) {
-        printf(ANSI_COLOR_RED "error: failed to read input\n" ANSI_COLOR_RESET);
+        printf(ANSI_COLOR_RED "Error: Failed to read input\n" ANSI_COLOR_RESET);
         return;
     }
 
@@ -337,97 +335,97 @@ void handle_file_drop(TypingSimulator* sim) {
         filepath[len - 2] = '\0';
     }
 
-    if (load_file_content(filepath, sim)) {
-        simulate_typing(sim);
+    if (LoadFileContent(filepath, simulator)) {
+        SimulateTyping(simulator);
     }
 }
 
-// handle user choice for input method (manual text or file)
-void handle_input_choice(TypingSimulator* sim) {
-    printf("\nselect input method:\n");
-    printf("1. type/paste text\n");
-    printf("2. drag and drop file\n");
-    printf("3. exit\n");
-    printf("\nenter your choice (1-3): ");
+// Handle user choice for input method (manual text or file)
+void HandleInputChoice(TypingSimulator* simulator) {
+    printf("\nSelect input method:\n");
+    printf("1. Type/Paste text\n");
+    printf("2. Drag and drop file\n");
+    printf("3. Exit\n");
+    printf("\nEnter your choice (1-3): ");
 
     char choice;
     if (scanf_s(" %c", &choice, 1) != 1) {
-        printf(ANSI_COLOR_RED "error: invalid input\n" ANSI_COLOR_RESET);
-        clear_input_buffer();
+        printf(ANSI_COLOR_RED "Error: Invalid input\n" ANSI_COLOR_RESET);
+        ClearInputBuffer();
         return;
     }
 
-    clear_input_buffer();
+    ClearInputBuffer();
 
     switch (choice) {
-    case '1':
-        handle_manual_input(sim);
-        break;
-    case '2':
-        handle_file_drop(sim);
-        break;
-    case '3':
-        exit(0);
-    default:
-        printf(ANSI_COLOR_RED "invalid choice. please try again.\n" ANSI_COLOR_RESET);
+        case '1':
+            HandleManualInput(simulator);
+            break;
+        case '2':
+            HandleFileDrop(simulator);
+            break;
+        case '3':
+            exit(0);
+        default:
+            printf(ANSI_COLOR_RED "Invalid choice. Please try again.\n" ANSI_COLOR_RESET);
     }
 }
 
-// initialize the typing simulator with default values
-void init_simulator(TypingSimulator* sim) {
-    sim->text = NULL;
-    sim->length = 0;
-    sim->stats.chars_typed = 0;
-    sim->stats.words_typed = 0;
-    sim->stats.current_wpm = 0.0;
-    sim->stats.elapsed_time = 0.0;
+// Initialize the typing simulator with default values
+void InitializeSimulator(TypingSimulator* simulator) {
+    simulator->text = NULL;
+    simulator->length = 0;
+    simulator->stats.chars_typed = 0;
+    simulator->stats.words_typed = 0;
+    simulator->stats.current_wpm = 0.0;
+    simulator->stats.elapsed_time = 0.0;
 }
 
-// clean up resources used by the simulator
-void cleanup_simulator(TypingSimulator* sim) {
-    if (sim->text) {
-        free(sim->text);
-        sim->text = NULL;
+// Clean up resources used by the simulator
+void CleanupSimulator(TypingSimulator* simulator) {
+    if (simulator->text) {
+        free(simulator->text);
+        simulator->text = NULL;
     }
-    sim->length = 0;
+    simulator->length = 0;
 }
 
 int main(void) {
     // Enable ANSI escape sequences for color output
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
-        printf("error: could not get console handle\n");
+        printf("Error: Could not get console handle\n");
         return 1;
     }
 
     DWORD dwMode = 0;
     if (!GetConsoleMode(hOut, &dwMode)) {
-        printf("error: could not get console mode\n");
+        printf("Error: Could not get console mode\n");
         return 1;
     }
 
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     if (!SetConsoleMode(hOut, dwMode)) {
-        printf("warning: could not enable virtual terminal processing\n");
+        printf("Warning: Could not enable virtual terminal processing\n");
     }
 
-    TypingSimulator sim;
-    init_simulator(&sim);
-    clear_screen();
+    TypingSimulator simulator;
+    InitializeSimulator(&simulator);
+    ClearScreen();
 
-printf(ANSI_COLOR_BLUE "humanizer typing simulator\n" ANSI_COLOR_RESET);
+    printf(ANSI_COLOR_BLUE "Humanizer Typing Simulator\n" ANSI_COLOR_RESET);
     printf("============================\n");
-    printf("base wpm: %d (actual wpm: %d)\n", BASE_WPM, BASE_WPM + WPM_ADJUSTMENT);
-    printf("supported file types: txt, doc, docx\n");
+    printf("Base WPM: %d (Actual WPM: %d)\n", BASE_WPM, BASE_WPM + WPM_ADJUSTMENT);
+    printf("Supported file types: txt, doc, docx\n");
 
     while (1) {
-        handle_input_choice(&sim);
-        cleanup_simulator(&sim);
-        init_simulator(&sim);
+        HandleInputChoice(&simulator);
+        CleanupSimulator(&simulator);
+        InitializeSimulator(&simulator);
         printf("\n");
     }
 
     // Cleanup before exit (though this won't be reached due to while(1))
-    cleanup_simulator(&sim);
+    CleanupSimulator(&simulator);
     return 0;
 }
